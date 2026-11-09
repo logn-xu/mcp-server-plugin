@@ -74,6 +74,10 @@ public class EndPointTest {
                             "getFlakyFailures",
                             "getQueueItem",
                             "createPipeline",
+                            "copyJob",
+                            "updateJobParameters",
+                            "getH5Config",
+                            "createH5Config",
                             "getSystemLog",
                             "getLogRecorders",
                             "cancelBuild");
@@ -121,7 +125,9 @@ public class EndPointTest {
                 assertReadOnly.accept(name);
             }
 
-            for (String name : new String[] {"triggerBuild", "rebuildBuild", "replayBuild", "createPipeline"}) {
+            for (String name : new String[] {
+                "triggerBuild", "rebuildBuild", "replayBuild", "createPipeline", "copyJob", "updateJobParameters"
+            }) {
                 assertDestructiveMutation.accept(name);
             }
 

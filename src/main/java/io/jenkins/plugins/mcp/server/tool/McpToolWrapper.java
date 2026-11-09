@@ -231,6 +231,10 @@ public class McpToolWrapper {
                 required.add(parameterName);
             }
             ObjectNode parameterNode = SUBTYPE_SCHEMA_GENERATOR.generateSchema(parameterType);
+            // Generated references are rooted at this parameter's schema, not the enclosing tool schema.
+            relocateSchemaReferences(
+                    parameterNode,
+                    "#/properties/" + parameterName.replace("~", "~0").replace("/", "~1"));
             String parameterDescription = getMethodParameterDescription(method, i);
             if (StringUtils.hasText(parameterDescription)) {
                 parameterNode.put(DESCRIPTION, parameterDescription);
@@ -274,6 +278,20 @@ public class McpToolWrapper {
         required.forEach(requiredArray::add);
 
         return schema.toPrettyString();
+    }
+
+    private static void relocateSchemaReferences(tools.jackson.databind.JsonNode node, String prefix) {
+        if (node instanceof ObjectNode object) {
+            var reference = object.path("$ref");
+            if (reference.isString() && reference.stringValue().startsWith("#/")) {
+                object.put("$ref", prefix + reference.stringValue().substring(1));
+            } else if (reference.isString() && "#".equals(reference.stringValue())) {
+                object.put("$ref", prefix);
+            }
+            object.properties().forEach(entry -> relocateSchemaReferences(entry.getValue(), prefix));
+        } else if (node.isArray()) {
+            node.forEach(child -> relocateSchemaReferences(child, prefix));
+        }
     }
 
     private boolean isTreePruneSupported() {

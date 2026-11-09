@@ -147,3 +147,9 @@ Temporary Items
 .apdisk
 .factorypath
 .jackknife/
+
+doc/
+.mcp.json
+AGENTS.md
+frontend-static.jenkinsfile
+.pi/mcp.json

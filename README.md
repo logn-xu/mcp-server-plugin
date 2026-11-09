@@ -49,6 +49,42 @@ Each match therefore gets a budget of character reads, and a search that runs pa
 error instead of carrying on. The budget is generous on purpose, so you are unlikely to meet it. If
 you do, simplify the pattern or search for plain text with `useRegex=false`, which has no budget.
 
+#### Optional H5 configuration service
+
+The optional H5 integration adds only `getH5Config` and `createH5Config`. Both require
+**Overall/Administer** (including direct calls), and are hidden from other users.
+An administrator must configure the service URL on the Jenkins controller:
+
+```text
+-Dio.jenkins.plugins.mcp.server.extensions.H5ConfigExtension.baseUrl=https://config.example.internal
+```
+
+Without this property, the tools remain visible to administrators but fail explicitly without
+accessing the network. The service currently uses trusted-network access without API authentication;
+Jenkins credentials, cookies and authorization headers are never forwarded. Prefer HTTPS.
+HTTP redirects are refused; connection/request timeouts are 5/20 seconds, with a 256 KiB request
+limit and a 1 MiB response limit. Jenkins proxy settings apply.
+H5 service requests explicitly use HTTP/1.1, avoiding unsupported cleartext HTTP/2 (`h2c`)
+upgrades when connecting directly to Uvicorn through a Kubernetes Service. Backend errors
+include bounded `code`, `message` and structured field details (legacy `detail` is also
+supported); request input and unstructured diagnostics from the canonical envelope are not echoed.
+
+- `getH5Config(projectName, module?)`: returns canonical application configuration, including its
+  revision. The key is the lowercase job **base name**, optionally followed by `:module`; folder
+  paths are not accepted and the job need not exist.
+- `createH5Config(projectName, config, module?, dryRun?, changeNote?)`: validates or creates a new
+  configuration. `config` uses canonical API field names, requires `target_dir` and `archive_name`,
+  and supports typed environment settings, package manager, Node installation and deployment options.
+  **Omitting `dryRun` means true; only explicit false writes.** Existing applications fail rather
+  than being overwritten. The result preserves `dry_run`, `changed`, `app`, `diff` and `warnings`.
+  The audit operator comes from the authenticated Jenkins user.
+
+Neither tool creates jobs or triggers builds. After approval and successful configuration creation,
+use the existing `copyJob` tool to copy your frontend template. Network errors can occur after a
+write has committed: query the configuration before retrying. Do not put secrets in configuration.
+See the [detailed execution and rollout guide](H5-CONFIG-INTEGRATION.md) for examples,
+template parameter alignment, validation coverage and partial-failure handling.
+
 #### Origin header validation
 
 The MCP specification marks validating the `Origin` header of incoming requests as a `MUST`.
@@ -416,6 +452,33 @@ The plugin provides the following built-in tools for interacting with Jenkins:
 
 #### Job Management
 - `createPipeline`: Create a new sandboxed Jenkins pipeline job (requires the Pipeline: Job and Pipeline: Groovy plugins). Required parameters: `jobName` (name or full path of the pipeline) and `pipelineScript` (Jenkins pipeline script). Parent folders must already exist. If a job with the provided name already exists, an error is returned.
+- `copyJob`: Create a new job by copying an existing job, like *Copy from* in the Jenkins UI. The whole configuration is copied, including the pipeline definition, SCM, triggers, and job properties. Required parameters: `templateJobFullName` and `jobName` (parent folders must already exist). Optional parameters:
+  - `parameterDefaults`: new default values for existing String, Text, Boolean, and Choice parameters. For a Choice parameter, the selected value is moved to the first position.
+  - `addStringParameters`: String parameters to append. Their names must not already exist in the template.
+  - `description`: the description of the new job.
+
+  The caller needs *Job/Create* in the target location, *Job/Extended Read* (or *Job/Configure*) on the template, and *Job/Configure* on the new job. All parameter changes are validated before the job is created. If a later step fails, the new job is removed. Example:
+  ```json
+  {
+    "templateJobFullName": "pipeline-template-springboot",
+    "jobName": "my-service",
+    "parameterDefaults": {"CODE_PATH": "my-service", "JAR_PATH": "my-service/target"},
+    "addStringParameters": {"PACKAGE_NAME": "my-service"},
+    "description": "My service"
+  }
+  ```
+- `updateJobParameters`: Modify the parameters of an existing job. Required parameter: `jobFullName`. Provide at least one of the following:
+  - `parameterDefaults`: a map from the name of an existing parameter to its new default value. Supported types are String, Text, Boolean, and Choice. A Choice value must be one of the existing choices, and it is moved to the first position.
+  - `addStringParameters`: a map of new String parameters to append after the existing ones, with their default values. The names must not already exist in the job. This also works for a job that has no parameters yet.
+
+  The caller needs *Job/Configure* on the job. The permission is checked before any input validation, and a caller without it gets an explicit access-denied error. A job the caller cannot read is reported as not existing. All values are validated before the job is changed, and the job is saved once. The result lists the previous and current default value of each updated parameter, plus the added parameters. Example:
+  ```json
+  {
+    "jobFullName": "my-service",
+    "parameterDefaults": {"CODE_PATH": "my-service", "DOCKER_DEPLOY": false, "ENV_LABEL": "uat"},
+    "addStringParameters": {"PACKAGE_NAME": "my-service"}
+  }
+  ```
 - `getJob`: Get a Jenkins job by its full path.
 - `getJobs`: Get a paginated list of Jenkins jobs, sorted by name.
 - `triggerBuild`: Trigger a build of a job.

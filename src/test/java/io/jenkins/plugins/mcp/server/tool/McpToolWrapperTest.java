@@ -98,6 +98,24 @@ class McpToolWrapperTest {
     }
 
     @Test
+    void nestedParameterReferencesResolveInsideTheEnclosingToolSchema() throws Exception {
+        McpToolWrapper wrapper = new McpToolWrapper(
+                objectMapper, target, MockMethods.class.getDeclaredMethod("nestedParams", Nested.class));
+        var schema = objectMapper.readTree(wrapper.generateForMethodInput());
+        var references = schema.findValues("$ref");
+        assertThat(references).isNotEmpty();
+        references.forEach(reference -> {
+            assertThat(reference.stringValue()).startsWith("#/properties/");
+            assertThat(schema.at(reference.stringValue().substring(1)).isMissingNode())
+                    .isFalse();
+        });
+    }
+
+    public record Nested(Map<String, NestedValue> values) {}
+
+    public record NestedValue(String value) {}
+
+    @Test
     void additionalPropertiesAcceptsBoolean() throws Exception {
         McpToolWrapper wrapper = new McpToolWrapper(
                 objectMapper, target, MockMethods.class.getDeclaredMethod("booleanMapParam", Map.class));
@@ -137,6 +155,9 @@ class McpToolWrapperTest {
     }
 
     public static class MockMethods {
+        @Tool
+        public void nestedParams(Nested nested) {}
+
         @Tool
         public boolean boolMethod() {
             return false;
