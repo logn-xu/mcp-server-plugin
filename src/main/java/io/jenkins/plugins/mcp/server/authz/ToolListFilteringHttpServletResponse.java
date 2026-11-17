@@ -26,14 +26,13 @@
 
 package io.jenkins.plugins.mcp.server.authz;
 
-import hudson.security.Permission;
 import io.jenkins.plugins.mcp.server.tool.ToolListFilter;
+import io.jenkins.plugins.mcp.server.tool.ToolPermissions;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
-import java.util.List;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
 import tools.jackson.databind.json.JsonMapper;
@@ -46,14 +45,14 @@ import tools.jackson.databind.json.JsonMapper;
 public class ToolListFilteringHttpServletResponse extends HttpServletResponseWrapper {
 
     private final Authentication auth;
-    private final Map<String, List<Permission>> toolPermissions;
+    private final Map<String, ToolPermissions.Requirements> toolPermissions;
     private final JsonMapper mapper;
     private PrintWriter writer;
 
     public ToolListFilteringHttpServletResponse(
             HttpServletResponse response,
             Authentication auth,
-            Map<String, List<Permission>> toolPermissions,
+            Map<String, ToolPermissions.Requirements> toolPermissions,
             JsonMapper mapper) {
         super(response);
         this.auth = auth;
@@ -80,14 +79,14 @@ public class ToolListFilteringHttpServletResponse extends HttpServletResponseWra
 
         private final PrintWriter delegate;
         private final Authentication auth;
-        private final Map<String, List<Permission>> toolPermissions;
+        private final Map<String, ToolPermissions.Requirements> toolPermissions;
         private final JsonMapper mapper;
         private final StringBuilder line = new StringBuilder();
 
         SseFilterWriter(
                 PrintWriter delegate,
                 Authentication auth,
-                Map<String, List<Permission>> toolPermissions,
+                Map<String, ToolPermissions.Requirements> toolPermissions,
                 JsonMapper mapper) {
             this.delegate = delegate;
             this.auth = auth;

@@ -52,14 +52,17 @@ you do, simplify the pattern or search for plain text with `useRegex=false`, whi
 #### Optional H5 configuration service
 
 The optional H5 integration adds only `getH5Config` and `createH5Config`. Both require
-**Overall/Administer** (including direct calls), and are hidden from other users.
+an **authenticated user with Overall/Read** (including direct calls). Ordinary users can query,
+preview and create configurations; anonymous users cannot see or call either tool, even if they
+have Overall/Read. Access is not scoped to Jenkins jobs: any permitted user can access any valid
+application key, whether or not a corresponding job exists.
 An administrator must configure the service URL on the Jenkins controller:
 
 ```text
 -Dio.jenkins.plugins.mcp.server.extensions.H5ConfigExtension.baseUrl=https://config.example.internal
 ```
 
-Without this property, the tools remain visible to administrators but fail explicitly without
+Without this property, the tools remain visible to permitted users but fail explicitly without
 accessing the network. The service currently uses trusted-network access without API authentication;
 Jenkins credentials, cookies and authorization headers are never forwarded. Prefer HTTPS.
 HTTP redirects are refused; connection/request timeouts are 5/20 seconds, with a 256 KiB request
@@ -479,6 +482,16 @@ The plugin provides the following built-in tools for interacting with Jenkins:
     "addStringParameters": {"PACKAGE_NAME": "my-service"}
   }
   ```
+#### View Management
+- `getViews`: List readable views at the Jenkins root (name, type, description and URL).
+- `getView(viewName)`: Inspect a root view. For List Views, the result separates `explicitJobs` from `visibleJobs`, includes `includeRegex` and `visibleJobCount`, and limits `visibleJobs` to 100 readable jobs. Unreadable job names are omitted.
+- `createView(name, description?, includeRegex?)`: Create a root List View. Requires **both** *View/Create* and *View/Configure* on Jenkins, checked before validation or creation. Jenkins security must be enabled. Only users with *View/Configure* can see the tool; a user with *View/Configure* but without *View/Create* can see it but cannot call it. The optional Java regex matches the **entire** root job name and is limited to 1000 characters.
+- `renameView(viewName, newName)`: Rename a root view and save it (requires *View/Configure*).
+- `setViewDescription(viewName, description)`: Set the view description; an empty string clears it (requires *View/Configure*).
+- `updateViewJobs(viewName, addJobs?, removeJobs?)`: Change the explicitly listed root jobs in a List View (requires *View/Configure*). Jobs must be readable by the caller; all inputs are validated before the single save. The result reports added, removed, absent, and removed-but-`stillVisible` jobs.
+- `setViewIncludeRegex(viewName, includeRegex)`: Change a List View's dynamic inclusion regex (requires *View/Configure*). An empty string clears the regex but leaves explicit jobs unchanged. Removing a job from the explicit list **does not hide it** if it still matches the regex; a regex does not grant job read access.
+
+#### Job Information
 - `getJob`: Get a Jenkins job by its full path.
 - `getJobs`: Get a paginated list of Jenkins jobs, sorted by name.
 - `triggerBuild`: Trigger a build of a job.
@@ -625,8 +638,11 @@ public SystemLog readSystemLog() {
 ```
 
 The caller must hold **at least one** of the listed permissions. A tool that fails the check is hidden
-from `tools/list` and rejected on `tools/call`. When Jenkins security is disabled, every tool is
-available. Permission ids are resolved when the server starts, so a typo fails fast. For a sensitive
+from `tools/list` and rejected on `tools/call`. When Jenkins security is disabled, permission checks
+allow every tool. Set `authenticationRequired = true` to additionally reject anonymous or missing
+identities in both discovery and calls, even when security is disabled; it defaults to false.
+Direct method calls must enforce this requirement themselves.
+Permission ids are resolved when the server starts, so a typo fails fast. For a sensitive
 operation, still call `Jenkins.get().checkPermission(...)` inside the method as defence in depth.
 
 **Overall permissions only.** The check runs against the Jenkins root, so `permissions` is for global

@@ -26,13 +26,12 @@
 
 package io.jenkins.plugins.mcp.server.authz;
 
-import hudson.security.Permission;
 import io.jenkins.plugins.mcp.server.Endpoint;
 import io.jenkins.plugins.mcp.server.tool.ToolListFilter;
+import io.jenkins.plugins.mcp.server.tool.ToolPermissions;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.spec.McpSchema;
-import java.util.List;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Mono;
@@ -46,10 +45,10 @@ public class PermissionFilteringStatelessHandler implements McpStatelessServerHa
     private static final String TOOLS_LIST = "tools/list";
 
     private final McpStatelessServerHandler delegate;
-    private final Map<String, List<Permission>> toolPermissions;
+    private final Map<String, ToolPermissions.Requirements> toolPermissions;
 
     public PermissionFilteringStatelessHandler(
-            McpStatelessServerHandler delegate, Map<String, List<Permission>> toolPermissions) {
+            McpStatelessServerHandler delegate, Map<String, ToolPermissions.Requirements> toolPermissions) {
         this.delegate = delegate;
         this.toolPermissions = toolPermissions;
     }

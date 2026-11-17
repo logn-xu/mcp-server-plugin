@@ -35,12 +35,16 @@ import io.jenkins.plugins.mcp.server.junit.TestCrumbIssuerMcpExtension;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServletResponse;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.function.Consumer;
+import jenkins.model.Jenkins;
 import org.htmlunit.HttpMethod;
 import org.htmlunit.WebRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.MockAuthorizationStrategy;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
 @WithJenkins
@@ -48,7 +52,17 @@ import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 public class EndPointTest {
     @McpClientTest
     void testListTools(JenkinsRule jenkins, JenkinsMcpClientBuilder jenkinsMcpClientBuilder) {
-        try (var client = jenkinsMcpClientBuilder.jenkins(jenkins).build()) {
+        // Some built-in tools require an authenticated user, so list them as an administrator.
+        jenkins.jenkins.setSecurityRealm(jenkins.createDummySecurityRealm());
+        jenkins.jenkins.setAuthorizationStrategy(new MockAuthorizationStrategy()
+                .grant(Jenkins.ADMINISTER)
+                .everywhere()
+                .to("admin"));
+        try (var client = jenkinsMcpClientBuilder
+                .jenkins(jenkins)
+                .requestCustomizer((request, method, endpoint, body, context) ->
+                        request.setHeader("Authorization", basicAuth("admin")))
+                .build()) {
             client.getServerCapabilities();
             var tools = client.listTools();
             assertThat(tools.tools())
@@ -78,10 +92,21 @@ public class EndPointTest {
                             "updateJobParameters",
                             "getH5Config",
                             "createH5Config",
+                            "getViews",
+                            "getView",
+                            "createView",
+                            "renameView",
+                            "setViewDescription",
+                            "updateViewJobs",
+                            "setViewIncludeRegex",
                             "getSystemLog",
                             "getLogRecorders",
                             "cancelBuild");
         }
+    }
+
+    private static String basicAuth(String user) {
+        return "Basic " + Base64.getEncoder().encodeToString((user + ":" + user).getBytes(StandardCharsets.UTF_8));
     }
 
     @McpClientTest
@@ -120,7 +145,9 @@ public class EndPointTest {
                 "getJobScm",
                 "getBuildScm",
                 "getBuildChangeSets",
-                "findJobsWithScmUrl"
+                "findJobsWithScmUrl",
+                "getViews",
+                "getView"
             }) {
                 assertReadOnly.accept(name);
             }
@@ -129,6 +156,16 @@ public class EndPointTest {
                 "triggerBuild", "rebuildBuild", "replayBuild", "createPipeline", "copyJob", "updateJobParameters"
             }) {
                 assertDestructiveMutation.accept(name);
+            }
+
+            for (String name : new String[] {"renameView", "updateViewJobs", "setViewIncludeRegex"}) {
+                assertDestructiveMutation.accept(name);
+            }
+            for (String name : new String[] {"createView", "setViewDescription"}) {
+                assertThat(toolsByName).containsKey(name);
+                assertThat(toolsByName.get(name).annotations().readOnlyHint()).isFalse();
+                assertThat(toolsByName.get(name).annotations().destructiveHint())
+                        .isFalse();
             }
 
             assertThat(toolsByName).containsKey("updateBuild");

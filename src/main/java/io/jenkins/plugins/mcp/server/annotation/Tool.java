@@ -71,12 +71,18 @@ public @interface Tool {
     /**
      * Permission ids (see {@link hudson.security.Permission#getId()}, e.g.
      * {@code "hudson.model.Hudson.SystemRead"}) the caller must hold at least one of, or the tool is
-     * hidden and cannot be called. When Jenkins security is off, the tool is always available.
+     * hidden and cannot be called. When Jenkins security is off, this permission check is bypassed.
+     * Any {@link #authenticationRequired()} restriction still applies.
      *
      * <p>These are overall permissions, checked against the Jenkins root. Item-level permissions (like
      * {@code Item.READ} on one folder or job) don't fit here and must be checked inside the tool method.
      */
     String[] permissions() default {};
+
+    /**
+     * Whether an authenticated caller is required, even when anonymous users have the declared permissions.
+     */
+    boolean authenticationRequired() default false;
 
     /**
      * Tree expression (Jenkins Remote REST API tree syntax) applied when the client does not

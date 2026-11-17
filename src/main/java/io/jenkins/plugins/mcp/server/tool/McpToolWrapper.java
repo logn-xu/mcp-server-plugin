@@ -111,7 +111,7 @@ public class McpToolWrapper {
 
     private final JsonMapper objectMapper;
 
-    private final List<Permission> requiredPermissions;
+    private final ToolPermissions.Requirements requiredPermissions;
 
     /** Passing this as {@code tree} returns the full exported object, bypassing any {@code defaultTree}. */
     public static final String FULL_OBJECT_TREE = "*";
@@ -121,7 +121,7 @@ public class McpToolWrapper {
         this.target = target;
         this.method = method;
         var tool = method.getAnnotation(Tool.class);
-        this.requiredPermissions = ToolPermissions.resolve(tool != null ? tool.permissions() : null);
+        this.requiredPermissions = ToolPermissions.requirements(tool);
         if (tool != null && StringUtils.hasText(tool.defaultTree())) {
             // Fail fast on a malformed defaultTree: a typo in the annotation should break the
             // build/startup (and thus unit tests), not every request at runtime.
@@ -134,9 +134,9 @@ public class McpToolWrapper {
         }
     }
 
-    /** Permissions the caller needs (at least one) to see and use this tool; empty means everyone can. */
+    /** Permissions the caller needs (at least one), in addition to any authentication requirement. */
     List<Permission> getRequiredPermissions() {
-        return requiredPermissions;
+        return requiredPermissions.permissions();
     }
 
     private static boolean isMethodParameterRequired(Method method, int index) {
@@ -396,8 +396,10 @@ public class McpToolWrapper {
             if (!ToolPermissions.isAllowed(authn, requiredPermissions)) {
                 log.debug("Denying tool call '{}': caller lacks a required permission", getToolName());
                 ToolResponse denied = new ToolResponse.ToolResponseBuilder()
-                        .message("Access denied: tool '" + getToolName() + "' requires one of "
-                                + requiredPermissions.stream()
+                        .message("Access denied: tool '" + getToolName() + "' requires "
+                                + (requiredPermissions.authenticationRequired() ? "an authenticated user and " : "")
+                                + "one of "
+                                + requiredPermissions.permissions().stream()
                                         .map(Permission::getId)
                                         .toList())
                         .status(ToolResponse.Status.FAILED)

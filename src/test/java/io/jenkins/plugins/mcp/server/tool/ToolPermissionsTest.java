@@ -63,6 +63,33 @@ class ToolPermissionsTest {
     }
 
     @Test
+    void authenticationRequirementRejectsAnonymousEvenWhenSecurityIsOff(JenkinsRule jenkins) {
+        var required = new ToolPermissions.Requirements(List.of(Jenkins.READ), true);
+        assertThat(ToolPermissions.isAllowed(Jenkins.ANONYMOUS2, required)).isFalse();
+        assertThat(ToolPermissions.isAllowed(null, required)).isFalse();
+        assertThat(ToolPermissions.isAllowed(hudson.security.ACL.SYSTEM2, required))
+                .isTrue();
+    }
+
+    @Test
+    void authenticationRequirementAlsoRequiresDeclaredPermissions(JenkinsRule jenkins) throws Exception {
+        jenkins.jenkins.setSecurityRealm(jenkins.createDummySecurityRealm());
+        jenkins.jenkins.setAuthorizationStrategy(
+                new MockAuthorizationStrategy().grant(Jenkins.READ).everywhere().to("reader"));
+        var required = new ToolPermissions.Requirements(List.of(Jenkins.READ), true);
+        assertThat(ToolPermissions.isAllowed(User.getById("reader", true).impersonate2(), required))
+                .isTrue();
+        assertThat(ToolPermissions.isAllowed(User.getById("no-read", true).impersonate2(), required))
+                .isFalse();
+        assertThat(ToolPermissions.isAllowed(Jenkins.ANONYMOUS2, required)).isFalse();
+        jenkins.jenkins.setAuthorizationStrategy(
+                new MockAuthorizationStrategy().grant(Jenkins.READ).everywhere().to("anonymous"));
+        assertThat(ToolPermissions.isAllowed(Jenkins.ANONYMOUS2, required)).isFalse();
+        assertThat(ToolPermissions.isAllowed(Jenkins.ANONYMOUS2, List.of(Jenkins.READ)))
+                .isTrue();
+    }
+
+    @Test
     void securedJenkinsRequiresOneOfTheDeclaredPermissions(JenkinsRule jenkins) throws Exception {
         jenkins.jenkins.setSecurityRealm(jenkins.createDummySecurityRealm());
         jenkins.jenkins.setAuthorizationStrategy(new MockAuthorizationStrategy()

@@ -28,6 +28,7 @@ package io.jenkins.plugins.mcp.server.tool;
 
 import hudson.security.ACL;
 import hudson.security.Permission;
+import io.jenkins.plugins.mcp.server.annotation.Tool;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -39,6 +40,28 @@ import org.springframework.security.core.Authentication;
 public final class ToolPermissions {
 
     private ToolPermissions() {}
+
+    public record Requirements(List<Permission> permissions, boolean authenticationRequired) {
+        public static final Requirements NONE = new Requirements(List.of(), false);
+    }
+
+    public static Requirements requirements(@Nullable Tool tool) {
+        return tool == null
+                ? Requirements.NONE
+                : new Requirements(resolve(tool.permissions()), tool.authenticationRequired());
+    }
+
+    public static boolean isAllowed(@Nullable Authentication auth, Requirements required) {
+        if (required.authenticationRequired() && !isAuthenticated(auth)) {
+            return false;
+        }
+        return isAllowed(auth, required.permissions());
+    }
+
+    public static boolean isAuthenticated(@Nullable Authentication auth) {
+        // Jenkins' internal SYSTEM identity is a trusted token with isAuthenticated() == false.
+        return auth != null && (auth == ACL.SYSTEM2 || auth.isAuthenticated()) && !ACL.isAnonymous2(auth);
+    }
 
     /**
      * Resolves permission ids to {@link Permission}s. An unknown id throws right away, so a typo in a

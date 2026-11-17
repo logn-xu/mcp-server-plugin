@@ -26,7 +26,6 @@
 
 package io.jenkins.plugins.mcp.server.tool;
 
-import hudson.security.Permission;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +45,7 @@ public final class ToolListFilter {
     public static McpSchema.JSONRPCResponse filter(
             McpSchema.JSONRPCResponse response,
             @Nullable Authentication auth,
-            Map<String, List<Permission>> toolPermissions) {
+            Map<String, ToolPermissions.Requirements> toolPermissions) {
         if (response == null || !(response.result() instanceof McpSchema.ListToolsResult listToolsResult)) {
             return response;
         }
@@ -60,7 +59,7 @@ public final class ToolListFilter {
     public static McpSchema.ListToolsResult filter(
             McpSchema.ListToolsResult result,
             @Nullable Authentication auth,
-            Map<String, List<Permission>> toolPermissions) {
+            Map<String, ToolPermissions.Requirements> toolPermissions) {
         List<McpSchema.Tool> visible = result.tools().stream()
                 .filter(tool -> isVisible(tool.name(), auth, toolPermissions))
                 .toList();
@@ -78,7 +77,7 @@ public final class ToolListFilter {
             JsonMapper mapper,
             String dataJson,
             @Nullable Authentication auth,
-            Map<String, List<Permission>> toolPermissions) {
+            Map<String, ToolPermissions.Requirements> toolPermissions) {
         try {
             JsonNode root = mapper.readTree(dataJson);
             if (!(root.get("result") instanceof ObjectNode result)
@@ -102,7 +101,8 @@ public final class ToolListFilter {
     }
 
     private static boolean isVisible(
-            String toolName, @Nullable Authentication auth, Map<String, List<Permission>> toolPermissions) {
-        return ToolPermissions.isAllowed(auth, toolPermissions.getOrDefault(toolName, List.of()));
+            String toolName, @Nullable Authentication auth, Map<String, ToolPermissions.Requirements> toolPermissions) {
+        return ToolPermissions.isAllowed(
+                auth, toolPermissions.getOrDefault(toolName, ToolPermissions.Requirements.NONE));
     }
 }

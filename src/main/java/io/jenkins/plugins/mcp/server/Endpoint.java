@@ -32,7 +32,6 @@ import hudson.Extension;
 import hudson.ExtensionComponent;
 import hudson.PluginWrapper;
 import hudson.model.UnprotectedRootAction;
-import hudson.security.Permission;
 import hudson.security.csrf.CrumbExclusion;
 import io.jenkins.plugins.mcp.server.annotation.Tool;
 import io.jenkins.plugins.mcp.server.authz.PermissionFilteringServerTransportProvider;
@@ -244,7 +243,7 @@ public class Endpoint extends CrumbExclusion implements UnprotectedRootAction {
      */
     private final JsonMapper objectMapper = new JsonMapper();
 
-    private Map<String, List<Permission>> toolPermissions = Map.of();
+    private Map<String, ToolPermissions.Requirements> toolPermissions = Map.of();
 
     /**
      * Package hosting the built-in tool extensions shipped with this plugin.
@@ -454,11 +453,11 @@ public class Endpoint extends CrumbExclusion implements UnprotectedRootAction {
      * caller and requires {@link Jenkins#READ}; see {@link #secureSyncTool}. An unknown permission id
      * fails fast at startup.
      */
-    private static Map<String, List<Permission>> buildToolPermissions(List<ToolCandidate> resolvedTools) {
-        Map<String, List<Permission>> permissions = new HashMap<>();
+    private static Map<String, ToolPermissions.Requirements> buildToolPermissions(List<ToolCandidate> resolvedTools) {
+        Map<String, ToolPermissions.Requirements> permissions = new HashMap<>();
         for (ToolCandidate candidate : resolvedTools) {
             Tool tool = candidate.method() != null ? candidate.method().getAnnotation(Tool.class) : null;
-            permissions.put(candidate.name(), ToolPermissions.resolve(tool != null ? tool.permissions() : null));
+            permissions.put(candidate.name(), ToolPermissions.requirements(tool));
         }
         return permissions;
     }

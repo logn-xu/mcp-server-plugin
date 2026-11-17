@@ -127,9 +127,9 @@ class H5ConfigExtensionTest {
     }
 
     @McpClientTest
-    void adminCanDiscoverQueryPreviewAndCreate(JenkinsRule jenkins, JenkinsMcpClientBuilder builder) throws Exception {
+    void readerCanDiscoverQueryPreviewAndCreate(JenkinsRule jenkins, JenkinsMcpClientBuilder builder) throws Exception {
         secure(jenkins);
-        try (var client = clientAs(jenkins, builder, "admin")) {
+        try (var client = clientAs(jenkins, builder, "reader")) {
             var tools = client.listTools();
             var get = TestUtils.findToolByName(tools, "getH5Config");
             var create = TestUtils.findToolByName(tools, "createH5Config");
@@ -176,7 +176,7 @@ class H5ConfigExtensionTest {
             assertThat(result(write).has("diff")).isTrue();
             assertThat(payloads).hasSize(2);
             assertThat(payloads.get(1).path("change_note").stringValue()).isEqualTo("initial");
-            assertThat(operators).containsExactly("admin", "admin");
+            assertThat(operators).containsExactly("reader", "reader");
             assertThat(jenkins.jenkins.getItem("Frontend-Demo")).isNull();
             assertThat(jenkins.jenkins.getQueue().getItems()).isEmpty();
 
@@ -203,17 +203,21 @@ class H5ConfigExtensionTest {
     }
 
     @McpClientTest
-    void nonAdminCannotSeeOrCallEitherTool(JenkinsRule jenkins, JenkinsMcpClientBuilder builder) throws Exception {
+    void anonymousAndUsersWithoutReadCannotSeeOrCallEitherTool(JenkinsRule jenkins, JenkinsMcpClientBuilder builder)
+            throws Exception {
         secure(jenkins);
-        try (var client = clientAs(jenkins, builder, "reader")) {
-            for (String name : List.of("getH5Config", "createH5Config")) {
-                assertThat(TestUtils.findToolByName(client.listTools(), name)).isNull();
-                assertThat(client.callTool(new McpSchema.CallToolRequest(
-                                        name, Map.of("projectName", "frontend-demo", "config", CONFIG)))
-                                .isError())
-                        .isTrue();
+        for (String user : List.of("no-read", "")) {
+            secure(jenkins, user.isEmpty());
+            try (var client = clientAs(jenkins, builder, user)) {
+                for (String name : List.of("getH5Config", "createH5Config")) {
+                    assertThat(TestUtils.findToolByName(client.listTools(), name))
+                            .isNull();
+                    assertThat(client.callTool(new McpSchema.CallToolRequest(
+                                            name, Map.of("projectName", "frontend-demo", "config", CONFIG)))
+                                    .isError())
+                            .isTrue();
+                }
             }
-            assertThat(TestUtils.findToolByName(client.listTools(), "whoAmI")).isNotNull();
         }
         assertThat(paths).isEmpty();
     }
@@ -222,20 +226,23 @@ class H5ConfigExtensionTest {
     @WithJenkins
     void statelessHonorsPermissionsAndAuditIdentity(JenkinsRule jenkins) throws Exception {
         secure(jenkins);
-        try (var admin = new StatelessMcpTestClient(jenkins, basicAuth("admin"))) {
-            assertThat(TestUtils.findToolByName(admin.listTools(), "getH5Config"))
-                    .isNotNull();
-            assertThat(TestUtils.findToolByName(admin.listTools(), "createH5Config"))
-                    .isNotNull();
-            assertThat(admin.callTool("getH5Config", Map.of("projectName", "frontend-demo"))
-                            .isError())
-                    .isFalse();
-            var created = admin.callTool(
-                    "createH5Config", Map.of("projectName", "frontend-demo", "config", CONFIG, "dryRun", false));
-            assertThat(created.isError()).isFalse();
-            assertThat(result(created).path("dry_run").booleanValue()).isFalse();
+        for (String user : List.of("admin", "reader")) {
+            try (var client = new StatelessMcpTestClient(jenkins, basicAuth(user))) {
+                assertThat(TestUtils.findToolByName(client.listTools(), "getH5Config"))
+                        .isNotNull();
+                assertThat(TestUtils.findToolByName(client.listTools(), "createH5Config"))
+                        .isNotNull();
+                assertThat(client.callTool("getH5Config", Map.of("projectName", "frontend-demo"))
+                                .isError())
+                        .isFalse();
+                var created = client.callTool(
+                        "createH5Config", Map.of("projectName", "frontend-demo", "config", CONFIG, "dryRun", false));
+                assertThat(created.isError()).isFalse();
+                assertThat(result(created).path("dry_run").booleanValue()).isFalse();
+            }
         }
-        for (String user : List.of("reader", "")) {
+        for (String user : List.of("no-read", "")) {
+            secure(jenkins, user.isEmpty());
             try (var denied = new StatelessMcpTestClient(jenkins, user.isEmpty() ? null : basicAuth(user))) {
                 for (String name : List.of("getH5Config", "createH5Config")) {
                     assertThat(TestUtils.findToolByName(denied.listTools(), name))
@@ -246,8 +253,8 @@ class H5ConfigExtensionTest {
                 }
             }
         }
-        assertThat(paths).hasSize(2);
-        assertThat(operators).containsExactly("admin");
+        assertThat(paths).hasSize(4);
+        assertThat(operators).containsExactly("admin", "reader");
     }
 
     @Test
@@ -256,20 +263,26 @@ class H5ConfigExtensionTest {
         secure(jenkins);
         System.clearProperty(H5ConfigExtension.BASE_URL_PROPERTY);
         var extension = ExtensionList.lookupSingleton(H5ConfigExtension.class);
-        for (var identity : List.of(User.getById("reader", true).impersonate2(), Jenkins.ANONYMOUS2)) {
-            try (var ignored = ACL.as2(identity)) {
+        for (String user : List.of("no-read", "")) {
+            secure(jenkins, user.isEmpty());
+            try (var ignored = ACL.as2(
+                    user.isEmpty()
+                            ? Jenkins.ANONYMOUS2
+                            : User.getById(user, true).impersonate2())) {
                 assertThatThrownBy(() -> extension.getH5Config(null, null)).isInstanceOf(AccessDeniedException.class);
                 assertThatThrownBy(() -> extension.createH5Config(null, null, null, null, null))
                         .isInstanceOf(AccessDeniedException.class);
             }
         }
-        try (var ignored = ACL.as2(User.getById("admin", true).impersonate2())) {
-            assertThatThrownBy(() -> extension.getH5Config("frontend-demo", null))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("not configured");
-            assertThatThrownBy(() -> extension.createH5Config("frontend-demo", config(), null, false, null))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("not configured");
+        for (String user : List.of("admin", "reader")) {
+            try (var ignored = ACL.as2(User.getById(user, true).impersonate2())) {
+                assertThatThrownBy(() -> extension.getH5Config("frontend-demo", null))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("not configured");
+                assertThatThrownBy(() -> extension.createH5Config("frontend-demo", config(), null, false, null))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("not configured");
+            }
         }
         assertThat(paths).isEmpty();
     }
@@ -319,12 +332,19 @@ class H5ConfigExtensionTest {
 
     private static McpSyncClient clientAs(JenkinsRule jenkins, JenkinsMcpClientBuilder builder, String user) {
         return builder.jenkins(jenkins)
-                .requestCustomizer((request, method, endpoint, body, context) ->
-                        request.setHeader("Authorization", basicAuth(user)))
+                .requestCustomizer((request, method, endpoint, body, context) -> {
+                    if (!user.isEmpty()) {
+                        request.setHeader("Authorization", basicAuth(user));
+                    }
+                })
                 .build();
     }
 
     private static void secure(JenkinsRule jenkins) throws Exception {
+        secure(jenkins, true);
+    }
+
+    private static void secure(JenkinsRule jenkins, boolean anonymousReadable) throws Exception {
         jenkins.jenkins.setSecurityRealm(jenkins.createDummySecurityRealm());
         jenkins.jenkins.setAuthorizationStrategy(new MockAuthorizationStrategy()
                 .grant(Jenkins.ADMINISTER)
@@ -332,7 +352,7 @@ class H5ConfigExtensionTest {
                 .to("admin")
                 .grant(Jenkins.READ)
                 .everywhere()
-                .to("reader", "anonymous"));
+                .to(anonymousReadable ? new String[] {"reader", "anonymous"} : new String[] {"reader"}));
         jenkins.jenkins.save();
     }
 }

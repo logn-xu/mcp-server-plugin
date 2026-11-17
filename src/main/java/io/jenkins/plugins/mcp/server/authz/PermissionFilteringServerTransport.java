@@ -26,9 +26,9 @@
 
 package io.jenkins.plugins.mcp.server.authz;
 
-import hudson.security.Permission;
 import io.jenkins.plugins.mcp.server.Endpoint;
 import io.jenkins.plugins.mcp.server.tool.ToolListFilter;
+import io.jenkins.plugins.mcp.server.tool.ToolPermissions;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -47,10 +47,10 @@ import reactor.util.context.ContextView;
 public class PermissionFilteringServerTransport implements McpServerTransport {
 
     private final McpServerTransport delegate;
-    private final Map<String, List<Permission>> toolPermissions;
+    private final Map<String, ToolPermissions.Requirements> toolPermissions;
 
     public PermissionFilteringServerTransport(
-            McpServerTransport delegate, Map<String, List<Permission>> toolPermissions) {
+            McpServerTransport delegate, Map<String, ToolPermissions.Requirements> toolPermissions) {
         this.delegate = delegate;
         this.toolPermissions = toolPermissions;
     }

@@ -30,6 +30,7 @@ import io.jenkins.plugins.mcp.server.annotation.Tool;
 import io.jenkins.plugins.mcp.server.annotation.ToolParam;
 import io.jenkins.plugins.mcp.server.extensions.h5.H5AppConfig;
 import io.jenkins.plugins.mcp.server.extensions.h5.H5ConfigClient;
+import io.jenkins.plugins.mcp.server.tool.ToolPermissions;
 import jakarta.annotation.Nullable;
 import java.io.IOException;
 import java.util.Locale;
@@ -37,6 +38,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import jenkins.model.Jenkins;
 import jenkins.util.SystemProperties;
+import org.springframework.security.access.AccessDeniedException;
 
 @Extension
 public class H5ConfigExtension implements McpServerExtension {
@@ -47,9 +49,10 @@ public class H5ConfigExtension implements McpServerExtension {
     @Tool(
             description =
                     "Get canonical H5 build configuration and revision by Jenkins job base name and optional module."
-                            + " Requires Overall/Administer and an administrator-configured H5 service URL."
+                            + " Requires an authenticated user with Overall/Read and an administrator-configured H5 service URL."
                             + " Does not require the job to exist. Does not fetch legacy pipeline configuration.",
-            permissions = {"hudson.model.Hudson.Administer"},
+            permissions = {"hudson.model.Hudson.Read"},
+            authenticationRequired = true,
             structuredOutput = true,
             annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
     public Map<String, Object> getH5Config(
@@ -58,17 +61,19 @@ public class H5ConfigExtension implements McpServerExtension {
             @Nullable @ToolParam(description = "Optional module name, without colon or slash", required = false)
                     String module)
             throws IOException, InterruptedException {
-        Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+        checkAccess();
         return client.get(SystemProperties.getString(BASE_URL_PROPERTY), appKey(projectName, module));
     }
 
     @Tool(
-            description = "Validate or create a new canonical H5 build configuration. Requires Overall/Administer."
+            description = "Validate or create a new canonical H5 build configuration."
+                    + " Requires an authenticated user with Overall/Read."
                     + " dryRun defaults to true (no persistence); pass false explicitly only after approval to create."
                     + " Existing applications are errors, never overwritten. Returns dry_run, changed, app, diff, warnings."
                     + " Does not create a Jenkins job or trigger a build; use copyJob separately after creation."
                     + " After a network failure, query the application before retrying.",
-            permissions = {"hudson.model.Hudson.Administer"},
+            permissions = {"hudson.model.Hudson.Read"},
+            authenticationRequired = true,
             structuredOutput = true,
             annotations = @Tool.Annotations(readOnlyHint = false, destructiveHint = false, idempotentHint = false))
     public Map<String, Object> createH5Config(
@@ -88,7 +93,7 @@ public class H5ConfigExtension implements McpServerExtension {
             @Nullable @ToolParam(description = "Optional change explanation, at most 512 characters", required = false)
                     String changeNote)
             throws IOException, InterruptedException {
-        Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+        checkAccess();
         String key = appKey(projectName, module);
         if (config == null
                 || config.targetDir() == null
@@ -107,6 +112,14 @@ public class H5ConfigExtension implements McpServerExtension {
                 !Boolean.FALSE.equals(dryRun),
                 Jenkins.getAuthentication2().getName(),
                 changeNote);
+    }
+
+    private static void checkAccess() {
+        var authentication = Jenkins.getAuthentication2();
+        if (!ToolPermissions.isAuthenticated(authentication)) {
+            throw new AccessDeniedException("H5 configuration tools require an authenticated user.");
+        }
+        Jenkins.get().checkPermission(Jenkins.READ);
     }
 
     private static String appKey(String projectName, String module) {

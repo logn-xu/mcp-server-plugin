@@ -26,7 +26,7 @@
 
 package io.jenkins.plugins.mcp.server.authz;
 
-import hudson.security.Permission;
+import io.jenkins.plugins.mcp.server.tool.ToolPermissions;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import java.util.List;
@@ -41,10 +41,10 @@ import reactor.core.publisher.Mono;
 public class PermissionFilteringStatelessTransport implements McpStatelessServerTransport {
 
     private final McpStatelessServerTransport delegate;
-    private final Map<String, List<Permission>> toolPermissions;
+    private final Map<String, ToolPermissions.Requirements> toolPermissions;
 
     public PermissionFilteringStatelessTransport(
-            McpStatelessServerTransport delegate, Map<String, List<Permission>> toolPermissions) {
+            McpStatelessServerTransport delegate, Map<String, ToolPermissions.Requirements> toolPermissions) {
         this.delegate = delegate;
         this.toolPermissions = toolPermissions;
     }

@@ -141,14 +141,13 @@ public final class H5ConfigClient {
         }
         int status = response.statusCode();
         if (status != expectedStatus) {
-            String explanation =
-                    switch (status) {
-                        case 404 -> "Application or API endpoint not found";
-                        case 409 -> "Application already exists or conflicts; no overwrite was attempted";
-                        case 401, 403 -> "Configuration service denied access";
-                        case 422 -> "Configuration validation failed";
-                        default -> "Unexpected configuration service response";
-                    };
+            String explanation = switch (status) {
+                case 404 -> "Application or API endpoint not found";
+                case 409 -> "Application already exists or conflicts; no overwrite was attempted";
+                case 401, 403 -> "Configuration service denied access";
+                case 422 -> "Configuration validation failed";
+                default -> "Unexpected configuration service response";
+            };
             throw new IOException("H5 API HTTP " + status + ": " + explanation + errorDetail(response.body())
                     + ". If creating, query the application before retrying.");
         }

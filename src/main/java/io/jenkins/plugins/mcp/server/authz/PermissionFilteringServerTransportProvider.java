@@ -26,7 +26,7 @@
 
 package io.jenkins.plugins.mcp.server.authz;
 
-import hudson.security.Permission;
+import io.jenkins.plugins.mcp.server.tool.ToolPermissions;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import java.util.List;
@@ -41,10 +41,10 @@ import reactor.core.publisher.Mono;
 public class PermissionFilteringServerTransportProvider implements McpServerTransportProvider {
 
     private final McpServerTransportProvider delegate;
-    private final Map<String, List<Permission>> toolPermissions;
+    private final Map<String, ToolPermissions.Requirements> toolPermissions;
 
     public PermissionFilteringServerTransportProvider(
-            McpServerTransportProvider delegate, Map<String, List<Permission>> toolPermissions) {
+            McpServerTransportProvider delegate, Map<String, ToolPermissions.Requirements> toolPermissions) {
         this.delegate = delegate;
         this.toolPermissions = toolPermissions;
     }
